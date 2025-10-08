@@ -7,7 +7,8 @@
 
 bool treat_builtin_commands(char *command);
 bool treat_program_commands(char *command);
-
+void change_working_directory(char *directory);
+void print_working_directory();
 
 
 int main(int argc, char **argv)
@@ -119,4 +120,19 @@ bool treat_program_commands(char* command){
     }
     return true;
 }
-
+void change_working_directory(char *directory){
+    if (directory == NULL){
+        directory = getenv("HOME");
+    }
+    if (chdir(directory) != 0){
+        perror("chdir() error"); // for errors
+    }
+}
+void print_working_directory(){
+    char pwd[1024];
+    if (getcwd(pwd, sizeof(pwd)) != NULL) {
+        printf("%s\n", pwd);
+    } else {
+        perror("getcwd() error"); // for errors
+    }
+}
