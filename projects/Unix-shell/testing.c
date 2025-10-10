@@ -12,6 +12,22 @@ void change_working_directory(char *directory);
 void print_working_directory();
 
 
+
+
+// structure to hold information about a running background job
+typedef struct Job {
+    pid_t pid;
+    char name[1024];
+    struct Job *next;
+} Job;
+
+// Global head of the linked list
+Job *job_list_head = NULL;
+
+
+
+
+
 int main(int argc, char **argv)
 {
     char *prompt = "308sh> ";
@@ -73,6 +89,24 @@ bool treat_builtin_commands(char *command){
         print_working_directory();
         return true;
     } 
+     //  EXTRA CREDIT: The 'jobs' command
+    else if (strcmp(command, "jobs") == 0) {
+        Job *current = job_list_head;
+        
+        if (current == NULL) {
+            printf("No background jobs running.\n");
+        } else {
+            printf("Active Background Jobs:\n");
+            // Traverse the list and print the required info
+            while (current != NULL) {
+                // Requirement: Output names and PID of your child processes (i.e. “process pid (procnam)”)
+                printf("process %d (%s)\n", current->pid, current->name); 
+                current = current->next;
+            }
+        }
+        return true;
+    }    // logic for handling and lsiting background jobs 
+
     else {
         return false;
     }
@@ -149,6 +183,10 @@ bool treat_program_commands(char* command) {
         if (is_background) {
             // Background command - shell prints the PID and RETURNS right away.
             printf("Background process started with pid: %d\n", pid);
+
+                // Add the process to the global linked list when successfully launched
+                 add_job(pid, args[0]);   //Extra credit:
+                 
             return true;
         }
         
@@ -189,4 +227,54 @@ void print_working_directory(){
     } else {
         perror("getcwd() error"); // for errors
     }
+}
+
+          //extra credit work
+
+// --- HELPER FUNCTION: Add Job ---
+void add_job(pid_t pid, char *name) {
+    Job *new_job = (Job *)malloc(sizeof(Job));
+    if (new_job == NULL) {
+        perror("malloc failed in add_job");
+        return;
+    }
+    new_job->pid = pid;
+    // Safely copy the command name (args[0])
+    strncpy(new_job->name, name, sizeof(new_job->name) - 1);
+    new_job->name[sizeof(new_job->name) - 1] = '\0';
+    
+    // Add the new job to the beginning of the list
+    new_job->next = job_list_head;
+    job_list_head = new_job;
+}
+
+              
+          // HELPER FUNCTION: Remove Job 
+
+void remove_job(pid_t pid) {
+    Job *current = job_list_head;
+    Job *prev = NULL;
+
+    // Traverse the list to find the matching PID
+    while (current != NULL && current->pid != pid) {
+        prev = current;
+        current = current->next;
+    }
+
+    if (current == NULL) {
+        // Job not found (shouldn't happen if logic is correct)
+        return;
+    }
+
+    // Unlink the node from the list
+    if (prev == NULL) {
+        // Removing the head node
+        job_list_head = current->next;
+    } else {
+        // Removing a middle/tail node
+        prev->next = current->next;
+    }
+    
+    // Free the memory
+    free(current);
 }
