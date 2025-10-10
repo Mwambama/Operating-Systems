@@ -76,50 +76,144 @@ bool treat_builtin_commands(char *command){
         return false;
     }
 }
-bool treat_program_commands(char* command){
+// bool treat_program_commands(char* command){
+//     bool is_background = false;
+//     // check if command should be run in the background
+//     if (command[strlen(command) - 1] == '&'){ 
+//         is_background = true;
+//         command[strlen(command) - 1] = '\0'; // remove the & from the command
+//     }
+//     pid_t pid = fork();
+//     if (pid < 0){
+//         perror("Fork failed.\n");
+//     }
+//     else if (pid == 0){ // child process
+//         if (!is_background){
+//             printf("Executing command with pid: %d\n", getpid());
+//         }
+//         char *args[10];
+//         int i = 0;
+//         args[0] = strtok(command, " ");
+//         while (args[i] != NULL){
+//             i++;
+//             args[i] = strtok(NULL, " ");
+//         }
+//         if (execvp(args[0], args) == -1){   //If execvp fails, it returns -1, and execution continues to the next line.
+//             perror("execvp() error");
+//             return false;
+//         }
+//         exit(EXIT_FAILURE);
+//     }
+//     else { // parent process
+//         if (is_background){
+//             // if its a background command, shell will not wait
+//             printf("Background process started with pid: %d\n", pid);
+//             return true;
+//         }
+//         int status;
+//         waitpid(pid, &status, 0);
+//         if (WIFEXITED(status)){
+//             printf("Child process %d exited with status %d\n", pid, WEXITSTATUS(status));
+//         } else {
+//             printf("Child process %d did not exit normally\n", pid);
+//         }
+//     }
+//     return true;
+// }
+
+
+bool treat_program_commands(char* command) {
+
+    char *args[10];  // hold command and its argue up to 10 token
     bool is_background = false;
-    // check if command should be run in the background
-    if (command[strlen(command) - 1] == '&'){ 
+    pid_t pid;
+    
+    
+    
+    // Check ing background suffix (&)
+    if (strlen(command) > 0 && command[strlen(command) - 1] == '&') { 
         is_background = true;
-        command[strlen(command) - 1] = '\0'; // remove the & from the command
+
+        command[strlen(command) - 1] = '\0';   //removing the '&' from the command string so execvp doesn't see it
     }
-    pid_t pid = fork();
-    if (pid < 0){
-        perror("Fork failed.\n");
-    }
-    else if (pid == 0){ // child process
-        if (!is_background){
-            printf("Executing command with pid: %d\n", getpid());
-        }
-        char *args[10];
-        int i = 0;
-        args[0] = strtok(command, " ");
-        while (args[i] != NULL){
+    
+    int i = 0;
+    char *token = strtok(command, " \t\r\n"); // Split by space, tab, CR, LF
+    while (token != NULL) {
+        if (i < 9) { // making sur there is space for  the NULL terminator at args[9]
+            args[i] = token;
             i++;
-            args[i] = strtok(NULL, " ");
         }
-        if (execvp(args[0], args) == -1){
-            perror("execvp() error");
-            return false;
-        }
-        exit(EXIT_FAILURE);
+        token = strtok(NULL, " \t\r\n");
     }
-    else { // parent process
-        if (is_background){
-            // if its a background command, shell will not wait
+    args[i] = NULL; 
+    
+    // Handling empty command after parsing 
+    if (args[0] == NULL) {
+        return true; 
+    }
+
+    // --PROCESS CREATION ---
+    pid = fork();
+    
+    if (pid < 0) {
+        perror("Fork failed");
+        return false;
+    } 
+    
+    // --- CHILD PROCESS EXECUTION ---
+    else if (pid == 0) { 
+        
+        if (!is_background) {
+            printf("[%d] %s\n", getpid(), args[0]); 
+        } else {
+            
+            printf("[%d] %s\n", getpid(), args[0]); // For background tasks
+        }
+        fflush(stdout); // for PID is printed (all of it)  before command output starts
+        
+        // execvp = excution, changes  the child's image with the external program.
+        if (execvp(args[0], args) == -1) {
+            // execvp() only returns if it FAILED 
+            
+            fprintf(stderr, "Cannot exec %s: No such file or directory\n", args[0]);
+            
+            exit(255); // Child erminate right away  with status 255
+        }
+        
+        exit(EXIT_FAILURE); 
+    }
+   
+    else { // PARENT PROCESS (Shell)
+        
+        if (is_background) {
+            // Background command - shell prints the PID and RETURNS right away.
             printf("Background process started with pid: %d\n", pid);
             return true;
         }
+        
+        // Foreground command - shell BLOCKS (waits for the child).
         int status;
-        waitpid(pid, &status, 0);
-        if (WIFEXITED(status)){
-            printf("Child process %d exited with status %d\n", pid, WEXITSTATUS(status));
+        // waitpid(pid, &status, 0) blocks until the specific child (pid) terminates.
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid failed");
+            return false;
+        }
+
+        // Prints the exit status of the terminated foreground child.
+        if (WIFEXITED(status)) {
+            printf("[%d] %s Exit %d\n", pid, args[0], WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+             // Handle termination by signal (like kill)
+             printf("[%d] %s Killed (%d)\n", pid, args[0], WTERMSIG(status));
         } else {
-            printf("Child process %d did not exit normally\n", pid);
+             printf("[%d] %s did not exit normally\n", pid, args[0]);
         }
     }
+    
     return true;
 }
+
 void change_working_directory(char *directory){
     if (directory == NULL){
         directory = getenv("HOME");
