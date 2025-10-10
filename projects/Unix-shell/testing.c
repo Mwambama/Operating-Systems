@@ -10,8 +10,6 @@
 
 
 
-
-
 // structure to hold information about a running background job
 typedef struct Job {
     pid_t pid;
@@ -19,7 +17,7 @@ typedef struct Job {
     struct Job *next;
 } Job;
 
-// Global head of the linked list
+// Global head for linked list
 Job *job_list_head = NULL;
 
 
@@ -29,7 +27,7 @@ bool treat_program_commands(char *command);
 void change_working_directory(char *directory);
 void print_working_directory();
 void remove_job(pid_t pid);
-
+void add_job(pid_t pid, char *name);
 
 
 
