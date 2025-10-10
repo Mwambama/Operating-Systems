@@ -1,0 +1,192 @@
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h> 
+#include <stdlib.h>  
+#include <stdbool.h>
+#include <sys/wait.h>
+
+bool treat_builtin_commands(char *command);
+bool treat_program_commands(char *command);
+void change_working_directory(char *directory);
+void print_working_directory();
+
+
+int main(int argc, char **argv)
+{
+    char *prompt = "308sh> ";
+    if (argc == 3 && strcmp(argv[1], "-p") == 0){
+        prompt = argv[2];
+    }
+    char command[1024];
+    // infinite loop accepting input from the user
+    while (1)
+    {
+        printf("%s", prompt);
+        fflush(stdout);
+        if (fgets(command, 1024, stdin) == NULL){
+            break; // empty command
+        }
+        command[strcspn(command, "\n")] = 0;
+        if (strcmp(command, "exit") == 0){
+            break; // shell will terminate if the user requests to exit
+        }
+        bool is_program;
+        bool is_builtin = treat_builtin_commands(command);
+        if (!is_builtin){
+            is_program = treat_program_commands(command);
+        }
+        if (!is_builtin && !is_program){
+            // requested command is not found and cannot be run
+            printf("Command not recognized or cannot be run.\n");
+        }
+        // periodically check for background processes everytime the user enters a command
+        int status;
+        pid_t finished; // check for processes that have finished
+        while ((finished = waitpid(-1, &status, WNOHANG)) > 0){
+        if (WIFEXITED(status)){
+            printf("Background process %d exited with status %d\n", finished, WEXITSTATUS(status));
+        } else {
+            printf("Background process %d did not exit normally\n", finished);
+        }
+        }
+
+    }
+}
+
+bool treat_builtin_commands(char *command){
+    if (strcmp(command, "pid") == 0){
+        printf("%d\n", getpid());
+        fflush(stdout);
+        return true;
+    }
+    else if (strcmp(command, "ppid") == 0){
+        printf("%d\n", getppid());
+        fflush(stdout);
+        return true;
+    }
+    else if (strncmp(command, "cd", 2) == 0){
+        change_working_directory(strtok(command + 3, " "));
+        return true;
+    }
+    else if (strcmp(command, "pwd") == 0){
+        print_working_directory();
+        return true;
+    } 
+    else {
+        return false;
+    }
+}
+
+
+
+
+
+bool treat_program_commands(char* command) {
+
+    char *args[10];  // hold command and its argue up to 10 token
+    bool is_background = false;
+    pid_t pid;
+    
+    
+    
+    // Check ing background suffix (&)
+    if (strlen(command) > 0 && command[strlen(command) - 1] == '&') { 
+        is_background = true;
+
+        command[strlen(command) - 1] = '\0';   //removing the '&' from the command string so execvp doesn't see it
+    }
+    
+    int i = 0;
+    char *token = strtok(command, " \t\r\n"); // Split by space, tab, CR, LF
+    while (token != NULL) {
+        if (i < 9) { // making sur there is space for  the NULL terminator at args[9]
+            args[i] = token;
+            i++;
+        }
+        token = strtok(NULL, " \t\r\n");
+    }
+    args[i] = NULL; 
+    
+    // Handling empty command after parsing 
+    if (args[0] == NULL) {
+        return true; 
+    }
+
+    // --PROCESS CREATION ---
+    pid = fork();
+    
+    if (pid < 0) {
+        perror("Fork failed");
+        return false;
+    } 
+    
+    // --- CHILD PROCESS EXECUTION ---
+    else if (pid == 0) { 
+        
+        if (!is_background) {
+            printf("[%d] %s\n", getpid(), args[0]); 
+        } else {
+            
+            printf("[%d] %s\n", getpid(), args[0]); // For background tasks
+        }
+        fflush(stdout); // for PID is printed (all of it)  before command output starts
+        
+        // execvp = excution, changes  the child's image with the external program.
+        if (execvp(args[0], args) == -1) {
+            // execvp() only returns if it FAILED 
+            
+            fprintf(stderr, "Cannot exec %s: No such file or directory\n", args[0]);
+            
+            exit(255); // Child erminate right away  with status 255
+        }
+        
+        exit(EXIT_FAILURE); 
+    }
+   
+    else { // PARENT PROCESS (Shell)
+        
+        if (is_background) {
+            // Background command - shell prints the PID and RETURNS right away.
+            printf("Background process started with pid: %d\n", pid);
+            return true;
+        }
+        
+        // Foreground command - shell BLOCKS (waits for the child).
+        int status;
+        // waitpid(pid, &status, 0) blocks until the specific child (pid) terminates.
+        if (waitpid(pid, &status, 0) == -1) {
+            perror("waitpid failed");
+            return false;
+        }
+
+        // Prints the exit status of the terminated foreground child.
+        if (WIFEXITED(status)) {
+            printf("[%d] %s Exit %d\n", pid, args[0], WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+             // Handle termination by signal (like kill)
+             printf("[%d] %s Killed (%d)\n", pid, args[0], WTERMSIG(status));
+        } else {
+             printf("[%d] %s did not exit normally\n", pid, args[0]);
+        }
+    }
+    
+    return true;
+}
+
+void change_working_directory(char *directory){
+    if (directory == NULL){
+        directory = getenv("HOME");
+    }
+    if (chdir(directory) != 0){
+        perror("chdir() error"); // for errors
+    }
+}
+void print_working_directory(){
+    char pwd[1024];
+    if (getcwd(pwd, sizeof(pwd)) != NULL) {
+        printf("%s\n", pwd);
+    } else {
+        perror("getcwd() error"); // for errors
+    }
+}
