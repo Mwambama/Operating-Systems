@@ -125,14 +125,13 @@ int main(int argc, char **argv)
         // Handle waitpid error if it's not simply 'no child finished'
         if (finished == -1 && errno != ECHILD) { 
             perror("waitpid error");
-        }
-        // --- END OF BACKGROUND PROCESS CHECK ---
+        } // done background check
 
         
         printf("%s", prompt);
         fflush(stdout);
         
-        // --- 2. INPUT PROCESSING ---
+
         
         if (fgets(command, 1024, stdin) == NULL){
             break; 
