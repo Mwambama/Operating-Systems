@@ -4,24 +4,25 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
-#include "Bank.h" // Includes initialize_accounts, read_account, write_account
+#include <errno.h>      
+#include "Bank.h" 
 
 // --- Configuration and Constants ---
 #define MAX_ACCOUNTS 10000 
 #define MAX_TOKENS 50    
 
-// --- Synchronization and Globals ---
-pthread_mutex_t account_locks[MAX_ACCOUNTS]; // Fine-grained locks (one per account ID)
-pthread_mutex_t queue_mutex;                  // Protects access to the request queue
-pthread_cond_t queue_cond;                   // Signals worker threads when a job is available
-pthread_mutex_t output_mutex;                 // Protects writing results to the output file
+// --- Global Synchronization and Data Structures ---
+pthread_mutex_t account_locks[MAX_ACCOUNTS]; 
+pthread_mutex_t queue_mutex;                  
+pthread_cond_t queue_cond;                   
+pthread_mutex_t output_mutex;                 
+FILE *output_file;                           
 
 int NUM_ACCOUNTS;
 int NUM_WORKERS;
 
-// --- Data Structures ---
 struct trans {
-    int acc_id; // 1-based index
+    int acc_id; 
     int amount;
 };
 
@@ -39,7 +40,7 @@ struct queue {
     struct request *head, *tail; 
     int next_request_id;
     int num_jobs;
-    int end_flag; // Set to 1 when 'END' command is received
+    int end_flag; 
 } request_queue;
 
 
@@ -54,9 +55,7 @@ struct request *dequeue_request();
 
 
 // --- Comparator for Deadlock Prevention (qsort) ---
-// Sorts integer pointers based on the integer value they point to.
 int integer_comparator(const void *a, const void *b) {
-    // We are sorting an array of 1-based account IDs
     return (*(int*)a - *(int*)b);
 }
 
@@ -84,12 +83,10 @@ struct request *dequeue_request() {
     
     pthread_mutex_lock(&queue_mutex);
     
-    // Wait while queue is empty AND END flag is not set
     while (request_queue.head == NULL && request_queue.end_flag == 0) {
         pthread_cond_wait(&queue_cond, &queue_mutex);
     }
 
-    // Check if we woke up to process a job or exit
     if (request_queue.head != NULL) {
         req = request_queue.head;
         request_queue.head = request_queue.head->next;
@@ -111,6 +108,7 @@ struct request *parse_input(char *input_line, int current_id) {
     char *token;
     int count = 0;
     
+    // strdup requires <string.h> and <stdlib.h>
     char *line_copy = strdup(input_line);
     if (line_copy == NULL) { fprintf(stderr, "Memory error during parsing.\n"); return NULL; }
 
@@ -141,7 +139,7 @@ struct request *parse_input(char *input_line, int current_id) {
         }
     } else if (strcmp(tokens[0], "END") == 0) {
         req->request_type = 'E';
-        request_queue.end_flag = 1; // Signal workers to prepare to exit
+        request_queue.end_flag = 1; 
     } else {
         goto invalid_input;
     }
@@ -162,7 +160,6 @@ invalid_input:
 void process_check(struct request *req) {
     int id = req->check_acc_id;
     
-    // Fine-Grained Locking: Lock the specific account being checked
     pthread_mutex_lock(&account_locks[id - 1]);
     int balance = read_account(id);
     pthread_mutex_unlock(&account_locks[id - 1]);
@@ -170,7 +167,6 @@ void process_check(struct request *req) {
     // Output
     gettimeofday(&req->endtime, NULL); 
     pthread_mutex_lock(&output_mutex);
-    // Use the required format: printf("TIME %ld.%06ld\n", time.tv_sec, time.tv_usec);
     fprintf(output_file, "%d BAL %d TIME %ld.%06ld %ld.%06ld\n", 
             req->request_id, balance, req->starttime.tv_sec, req->starttime.tv_usec,
             req->endtime.tv_sec, req->endtime.tv_usec);
@@ -204,10 +200,10 @@ void process_transaction(struct request *req) {
         int amount = req->transactions[i].amount;
         original_balances[i] = read_account(id); 
         
-        // Insufficient Funds Check (Atomicity requirement)
+        // Insufficient Funds Check 
         if (original_balances[i] + amount < 0) {
             insufficient_acc_id = id;
-            break; // Identify first violating account
+            break; 
         }
     }
     
@@ -243,21 +239,23 @@ void process_transaction(struct request *req) {
         pthread_mutex_unlock(&account_locks[sorted_ids[i] - 1]);
     }
     
-    free(sorted_ids);
-    free(original_balances);
-    free(all_ids);
+    // Free dynamically allocated memory
+    if (sorted_ids) free(sorted_ids);
+    if (original_balances) free(original_balances);
+    if (all_ids) free(all_ids);
 }
 
 
 // --- Worker Thread Routine ---
 
 void *worker_thread(void *arg) {
+    // FIX 5: Comment out the unused parameter 'arg' to clear the warning
+    // (void *arg) is the signature required by pthreads, but we ignore the parameter itself
     struct request *req;
 
     while (1) {
-        req = dequeue_request(); // Blocks if queue is empty (using cond_wait)
+        req = dequeue_request(); 
         
-        // Exit condition: if END flag is set AND no more jobs are in the queue
         if (req == NULL && request_queue.end_flag == 1) {
             pthread_cond_broadcast(&queue_cond); 
             break;
@@ -269,11 +267,11 @@ void *worker_thread(void *arg) {
             } else if (req->request_type == 'T') {
                 process_transaction(req);
             }
-            // Clean up memory allocated for the transactions array in parse_input
+            
             if (req->request_type == 'T' && req->transactions != NULL) {
                 free(req->transactions);
             }
-            free(req); // Free the request structure itself
+            free(req); 
         }
     }
     return NULL;
@@ -281,7 +279,7 @@ void *worker_thread(void *arg) {
 
 
 // --- Main Function (Producer) ---
-
+// FIX 3: Corrected the main function signature
 int main(int argc, char **argv) {
     if (argc != 4) {
         fprintf(stderr, "Usage: ./appserver <# of worker threads> <# of accounts> <output file>\n");
@@ -303,6 +301,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Error: Failed to initialize bank accounts.\n");
         return 1;
     }
+    
+    // Open the global output file pointer
+    // FIX 2: output_file is declared globally and opened here
     output_file = fopen(output_filename, "w");
     if (output_file == NULL) {
         perror("Error opening output file");
@@ -312,7 +313,9 @@ int main(int argc, char **argv) {
     // Initialize Synchronization Primitives
     pthread_mutex_init(&queue_mutex, NULL);
     pthread_cond_init(&queue_cond, NULL);
-    pthread_mutex_init(&output_mutex, NULL);
+    // FIX 4: Initialized the global output mutex
+    pthread_mutex_init(&output_mutex, NULL); 
+    
     for (int i = 0; i < NUM_ACCOUNTS; i++) {
         pthread_mutex_init(&account_locks[i], NULL); 
     }
@@ -328,7 +331,7 @@ int main(int argc, char **argv) {
         pthread_create(&workers[i], NULL, worker_thread, NULL);
     }
 
-    // 4. Input Loop (Main thread acts as request producer)
+    // 4. Input Loop (Producer)
     char input_line[1024];
     while (request_queue.end_flag == 0 && fgets(input_line, sizeof(input_line), stdin) != NULL) {
         struct request *req = parse_input(input_line, request_queue.next_request_id);
@@ -337,12 +340,10 @@ int main(int argc, char **argv) {
             gettimeofday(&req->starttime, NULL); 
             
             if (req->request_type == 'E') {
-                // If 'END', enqueue it, but immediately break the input loop
                 enqueue_request(req); 
                 break;
             } else {
                 enqueue_request(req);
-                // Immediate console response
                 printf("< ID %d\n", req->request_id);
                 request_queue.next_request_id++;
             }
@@ -350,8 +351,8 @@ int main(int argc, char **argv) {
     }
     
     // 5. Final Cleanup and Exit
-    request_queue.end_flag = 1; // Ensure flag is set one final time to wake any stragglers
-    pthread_cond_broadcast(&queue_cond); // Wake up all waiting workers
+    request_queue.end_flag = 1; 
+    pthread_cond_broadcast(&queue_cond); 
     
     for (int i = 0; i < NUM_WORKERS; i++) {
         pthread_join(workers[i], NULL);
