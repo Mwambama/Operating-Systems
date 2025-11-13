@@ -1,10 +1,10 @@
-# --- Compiler Configuration ---
+
 CC = gcc
 # CFLAGS includes necessary warnings and the C99 standard
 # -pthread is critical for compiling C code that uses pthreads
 CFLAGS = -Wall -Wextra -pthread -std=c99 
 
-# LDFLAGS is used by the linker (final step)
+# LDFLAGS is used by the linker
 # -pthread links the final executable with the Pthreads library
 LDFLAGS = -pthread 
 
