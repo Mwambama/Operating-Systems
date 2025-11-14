@@ -1,0 +1,51 @@
+
+// first is use: make
+
+
+
+/**
+ * 1. Compilation and Setup:   These commands must be run first to prepare the server executables.
+ * 
+ * Create Coarse-Grained File:	$ cp appserver.c appserver-coarse.c	   Creates the required copy for Part II analysis.
+ * 
+ * Build Fine-Grained Server	$ make	Compiles appserver.c and Bank.c into the executable appserver (Fine-Grained).
+ * 
+ * Build Coarse-Grained Server	$ gcc -Wall -Wextra -pthread -std=c99 appserver-coarse.c Bank.c -o appserver-coarse	Manually compiles the coarse-grained file into appserver-coarse.
+ * 
+ * Compile Test Script	$ gcc Project2Test.c -o Project2Test -lm -lpthread	Compiles the test harness into the Project2Test executable.
+ * 
+ */
+
+
+ /**
+  * 2. Testing and Verification (Single Run):  his checks basic functionality (e.g., workers running, outputting correctly).
+  * 
+  * Run Test Script	$ ./Project2Test ./appserver 4 1000 results.txt	Starts the test with 4 worker threads and 1000 accounts.
+  * 
+  * Monitor Results (in separate terminal)	$ tail -f results.txt	Monitors the asynchronous output file in real-time. (File name will dynamically be test_4_1000.txt in practice).
+  * 
+  */
+
+  /**
+   * 3. Performance Measurement (Section 6.2):  To get the required Average Real Time data
+   * 
+   * Fine-Grained	$ time ./Project2Test ./appserver 10 1000 fine_run_[X].txt	Used to calculate the 37.06s average.
+   * 
+   * 
+   * Coarse-Grained	$ time ./Project2Test ./appserver-coarse 10 1000 coarse_run_[X].txt	Used to calculate the 81.80s average.
+   */
+
+
+
+
+
+//////                 Using time to calcuate the average  real time 
+
+////   Run #	Fine-Grained real time	        Coarse-Grained real time
+
+ ///     1.          0m36.994s                  1m21.866s
+ //      2.          0m37.092s                  1m21.610s
+ ///     3.          0m37.107s                  1m21.848s
+ ///     4.          0m37.048s                  1m22.559s
+ ///     5.          0m 37.071s                 1m21.127s
+ 
